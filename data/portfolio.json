@@ -1,0 +1,22 @@
+[
+  {
+    "id": "ahura-bath",
+    "title": "حمام اهورایی",
+    "poem": "آتش در آب، نقش جاودانگی",
+    "summary": "بازسازی حمام سنتی با کاشی‌های دست‌ساز الهام‌گرفته از آتشکده‌های ساسانی. هر کاشی با لعاب مسی و بافت دستی، نور را مثل شعله بازتاب می‌دهد.",
+    "location": "تهران، نیاوران",
+    "materials": ["سرامیک دست‌ساز", "لعاب مسی", "کاشی کاری سنتی"],
+    "image": "/portfolio/ahura-bath.webp",
+    "depthMap": "/portfolio/ahura-bath-depth.webp"
+  },
+  {
+    "id": "mehr-kitchen",
+    "title": "آشپزخانۀ مهر",
+    "poem": "خورشید در دل کاشی خانه می‌کند",
+    "summary": "کاشی‌کاری پشت اپن با الگوی هندسی برگرفته از نقوش خورشیدی تخت‌جمشید، در پالتی از زرد گرم و خاکستری دودی.",
+    "location": "اصفهان",
+    "materials": ["سرامیک لعابی", "کاشی مدولار"],
+    "image": "/portfolio/mehr-kitchen.webp",
+    "depthMap": "/portfolio/mehr-kitchen-depth.webp"
+  }
+]
