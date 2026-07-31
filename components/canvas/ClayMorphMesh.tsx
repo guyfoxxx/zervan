@@ -1,31 +1,45 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-// 5-7 key forms, ordered from deep-past artifact to far-future geometry.
-// Each is a morph target on the SAME base mesh topology (sculpted/retopologized
-// to share vertex count) so morphTargetInfluences can blend between them.
-const MORPH_MODEL_PATH = "/models/clay-morph-set.glb";
-const MORPH_COUNT = 7; // rhyton, elamite-brick, persepolis-fragment, modern-tile-a, modern-tile-b, parametric-a, parametric-b
+// TEMPORARY placeholder for ClayMorphMesh.tsx, until the real 7-target
+// GLTF (clay-morph-set.glb) exists. Instead of blending between separate
+// meshes, this procedurally deforms a single IcosahedronGeometry using a
+// noise field whose parameters (frequency, amplitude, angularity) shift
+// with timeAxis — so it still reads as "form changing across time" even
+// though it's not the real sculpted artifacts yet.
+//
+// Swap this file out for the real ClayMorphMesh.tsx once the GLB is ready;
+// the props (timeAxis, onFreeze) are kept identical so TimeSculptorCanvas
+// doesn't need to change.
 
 interface ClayMorphMeshProps {
-  timeAxis: number; // -1..1, driven by horizontal pointer
+  timeAxis: number; // -1..1
   onFreeze?: (frozen: boolean) => void;
+}
+
+// simple 3D value noise, no external deps
+function noise3D(x: number, y: number, z: number) {
+  const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+  return s - Math.floor(s);
 }
 
 export default function ClayMorphMesh({ timeAxis, onFreeze }: ClayMorphMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const { scene } = useGLTF(MORPH_MODEL_PATH) as any;
+  const baseGeometry = useMemo(() => new THREE.IcosahedronGeometry(1, 5), []);
+  const basePositions = useMemo(
+    () => baseGeometry.attributes.position.array.slice(),
+    [baseGeometry]
+  );
+
   const lastAxisRef = useRef(timeAxis);
   const stillSinceRef = useRef<number | null>(null);
   const [frozen, setFrozen] = useState(false);
   const glowRef = useRef(0);
 
   useEffect(() => {
-    // detect movement to reset the freeze timer
     if (Math.abs(timeAxis - lastAxisRef.current) > 0.002) {
       lastAxisRef.current = timeAxis;
       stillSinceRef.current = null;
@@ -38,24 +52,41 @@ export default function ClayMorphMesh({ timeAxis, onFreeze }: ClayMorphMeshProps
     }
   }, [timeAxis, frozen, onFreeze]);
 
-  useFrame((state, delta) => {
-    const mesh = meshRef.current as any;
-    if (!mesh?.morphTargetInfluences) return;
+  useFrame((_, delta) => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
 
-    // Map timeAxis (-1..1) to a continuous position across MORPH_COUNT targets,
-    // then blend only the two neighboring targets (classic linear morph blend).
-    const pos = ((timeAxis + 1) / 2) * (MORPH_COUNT - 1); // 0..(N-1)
-    const lower = Math.floor(pos);
-    const upper = Math.min(lower + 1, MORPH_COUNT - 1);
-    const t = pos - lower;
+    const geom = mesh.geometry as THREE.BufferGeometry;
+    const pos = geom.attributes.position;
+    const arr = pos.array as Float32Array;
 
-    for (let i = 0; i < MORPH_COUNT; i++) {
-      mesh.morphTargetInfluences[i] = 0;
+    // -1 (deep past) => low-freq, angular, rough (ancient artifact feel)
+    // 0 (present)    => smooth, minimal, low amplitude (modern tile feel)
+    // +1 (future)    => high-freq, fluid, exaggerated (parametric feel)
+    const t = timeAxis; // -1..1
+    const freq = 1.5 + Math.abs(t) * 3.5;
+    const amplitude = 0.06 + Math.abs(t) * 0.22;
+    const angularity = t < 0 ? Math.abs(t) : 0; // only past gets "faceted" look
+
+    for (let i = 0; i < arr.length; i += 3) {
+      const bx = basePositions[i];
+      const by = basePositions[i + 1];
+      const bz = basePositions[i + 2];
+
+      let n = noise3D(bx * freq, by * freq, bz * freq);
+      if (angularity > 0) {
+        n = Math.floor(n * 4) / 4; // quantize noise for a rougher, artifact-like facet
+      }
+
+      const displaced = 1 + (n - 0.5) * amplitude;
+      arr[i] = bx * displaced;
+      arr[i + 1] = by * displaced;
+      arr[i + 2] = bz * displaced;
     }
-    mesh.morphTargetInfluences[lower] = 1 - t;
-    mesh.morphTargetInfluences[upper] = t;
 
-    // check freeze threshold
+    pos.needsUpdate = true;
+    geom.computeVertexNormals();
+
     if (!frozen && stillSinceRef.current !== null) {
       const elapsed = performance.now() - stillSinceRef.current;
       if (elapsed > 1500) {
@@ -64,7 +95,6 @@ export default function ClayMorphMesh({ timeAxis, onFreeze }: ClayMorphMeshProps
       }
     }
 
-    // subtle glow pulse when frozen
     const targetGlow = frozen ? 1 : 0;
     glowRef.current = THREE.MathUtils.lerp(glowRef.current, targetGlow, delta * 4);
     const mat = mesh.material as THREE.MeshStandardMaterial;
@@ -74,8 +104,14 @@ export default function ClayMorphMesh({ timeAxis, onFreeze }: ClayMorphMeshProps
   });
 
   return (
-    <primitive object={scene} ref={meshRef} scale={1.2} position={[0, 0, 0]} />
+    <mesh ref={meshRef} geometry={baseGeometry} scale={1.2}>
+      <meshStandardMaterial
+        color="#8a6a4a"
+        roughness={0.85}
+        metalness={0.05}
+        emissive="#d99a4e"
+        emissiveIntensity={0}
+      />
+    </mesh>
   );
 }
-
-useGLTF.preload(MORPH_MODEL_PATH);
